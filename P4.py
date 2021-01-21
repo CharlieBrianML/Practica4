@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.cluster import KMeans
 # from os import listdir
 # from os.path import isfile, join
-# import cv2
+import cv2
 
 
 def iter_folder():
@@ -11,7 +12,7 @@ def iter_folder():
     """
     orgn_matrix = []
 
-    for i in range(1223, 1223+20):
+    for i in range(1223, 1223+500):
         try:
             path = 'rawdata/' + str(i)
             algo = read_file(path)
@@ -19,16 +20,20 @@ def iter_folder():
                 orgn_matrix.append(algo)
         except:
             pass
+    dim = read_img('gato.jpg').reshape(16384,)
+    orgn_matrix.append(dim)
+
+    # plt.imshow(orgn_matrix[1].reshape(128, 128), cmap='gray')
+    # plt.show()
     return orgn_matrix
 
 
 def svd(data):
-    U, Sigma, VT = np.linalg.svd(data, full_matrices=False)
-    # Sanity check on dimensions
-    print("data:", data.shape)
-    print("U:", U.shape)
-    print("Sigma:", Sigma.shape)
-    print("V^T:", VT.shape)
+    # print("data:", data.shape)
+    # print("U:", U.shape)
+    # print("Sigma:", Sigma.shape)
+    # print("V^T:", VT.shape)
+    return np.linalg.svd(data, full_matrices=False)
 
 
 def img_mean(data):
@@ -36,8 +41,8 @@ def img_mean(data):
     Se obtiene la media de las imágenes y se muestra la imagen resultante
     """
     data_mean = np.mean(data, axis=0)
-    # data_reshaped = data_mean.reshape(128,128)
-    # plt.imshow(data_reshaped)
+    # data_reshaped = data_mean.reshape(128, 128)
+    # plt.imshow(data_reshaped, cmap='gray')
     # plt.show()
     return data_mean
 
@@ -46,12 +51,18 @@ def mean_subtract(orgn_matrix, img_mean):
     """
     Se resta la media resultante de cada una de las imágenes contenidas en orgn_matrix
     """
-    mean_matrix = []
+    sub_img_mn = []
     for i in range(len(orgn_matrix)):
-        mean_matrix.append(orgn_matrix[i] - img_mean[i])
-    # plt.imshow(result.reshape(128,128))
+        sub_img_mn.append(subtract_ind(orgn_matrix[i], img_mean))
+        # plt.imshow(sub_img_mn[i].reshape(128,128),cmap='gray')
+        # plt.show()
+    # plt.imshow(sub_img_mn[0].reshape(128, 128), cmap='gray')
     # plt.show()
-    return mean_matrix
+    return np.matrix(sub_img_mn)
+
+
+def subtract_ind(orgn_data, mean):
+    return orgn_data - mean
 
 
 def read_file(file_path):
@@ -71,11 +82,63 @@ def read_file(file_path):
     # plt.show()
 
 
+def generic_name(data, VT, num_components):
+    return np.matmul(data, VT[:num_components, :].T)
+
+
+def reconstruction(Y, C, M, h, w, image_index):
+    # n_samples, n_features = Y.shape
+    weights = np.dot(Y, C.transpose())
+    centered_vector = np.dot(weights[image_index, :], C)
+    recovered_image = (M+centered_vector).reshape(h, w)
+    return recovered_image
+
+
+def save_imges(listFiles):
+    for i in range(len(listFiles)):
+        # Guarda como imagen .png
+        plt.imsave('data_gato_10/'+str(i)+'.png', listFiles[i], cmap='gray')
+
+
+def read_img(path):
+    return cv2.imread(path, 0)
+
+
 if __name__ == "__main__":
-    orgn_matrix = iter_folder()
+    orgn_matrix = iter_folder()  # 498
     img_mean_v = img_mean(orgn_matrix)  # img_mean_v.shape = (16384,)
-    mean_matrix = mean_subtract(orgn_matrix, img_mean_v)
-    svd(np.matrix(mean_matrix))  # np.matrix(mean_matrix).shape = (18, 16384)
+    sub_img_mn = mean_subtract(orgn_matrix, img_mean_v)
+    U, Sigma, VT = svd(sub_img_mn)  # np.matrix(sub_img_mn).shape = (18, 16384)
+    num_components = 100
+    components = VT[:num_components]
+    Y = generic_name(orgn_matrix, VT, num_components)
+
+    recovered_images = [reconstruction(
+        sub_img_mn, components, img_mean_v, 128, 128, i) for i in range(len(orgn_matrix))]
+
+    plt.imshow(recovered_images[1],cmap='gray')
+    plt.show()
+    # recov_img = reconstruction(sub_img_mn, components, img_mean_v, 128, 128, 1)
+    # plt.imshow(components[1].reshape(128,128),cmap='gray')
+    # plt.show()
+    # save_imges(recovered_images)
+    plt.scatter(Y[:, 0].tolist(), Y[:, 1].tolist())
+    plt.show()
+
+    kmed = KMeans(3)
+    kmed.fit(Y)
+    labels = kmed.predict(Y)
+
+    arr = []
+    for i in range(499):
+        if labels[i] == 0:
+            arr.append('b')
+        elif labels[i] == 1:
+            arr.append('g')
+        elif labels[i] == 2:
+            arr.append('r')
+    plt.scatter(Y[:, 0].tolist(), Y[:, 1].tolist(), s=30, c=arr)
+    plt.show()
 
     # forma de Charlie
     # save_imges(ls('rawdata'))
